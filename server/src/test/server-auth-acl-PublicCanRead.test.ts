@@ -200,9 +200,6 @@ await describe('wallet-attached-storage-server with acl type PublicCanRead', asy
       // get the item without auth, expecting it to be ok
       {
         const response = await server.fetch(new Request(item0Url))
-        if (!response.ok) {
-          console.warn('unexpected not ok response', response)
-        }
         assert.ok(response.ok, `response to GET ${item0Url.pathname} sans auth MUST be ok`)
       }
     })

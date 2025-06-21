@@ -87,7 +87,7 @@ export async function authorizeRequestWithSpaceAcl<P extends string>(
       return false
     }
     if (effectiveAcl.type !== 'application/json') {
-      throw new Error(`unexpected acl type`, {
+      throw new Error(`Unexpected ACL type: expected 'application/json', but got '${effectiveAcl.type}'.`, {
         cause: effectiveAcl.type,
       })
     }
