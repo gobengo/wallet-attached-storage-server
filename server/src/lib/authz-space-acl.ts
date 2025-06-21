@@ -1,5 +1,3 @@
-import type { Context, Next, Env } from "hono"
-import { HTTPException } from "hono/http-exception"
 import { SpaceRepository } from "wallet-attached-storage-database"
 import ResourceRepository from "wallet-attached-storage-database/resource-repository"
 import type { Database, ISpace } from "wallet-attached-storage-database/types"
@@ -36,13 +34,14 @@ interface ISpaceResourceHonoOptions<P extends string> {
   space: () => Promise<ISpace>
   data: Database,
 }
+
 export async function authorizeRequestWithSpaceAcl<P extends string>(
   request: Pick<Request, 'url' | 'method'>,
   options: ISpaceResourceHonoOptions<P>
 ): Promise<boolean> {
   const resources = new ResourceRepository(options.data)
   const spaces = new SpaceRepository(options.data)
-
+  let effectiveAcl: Blob | undefined
   const space = await options.space()
   if (!space) return false
 
@@ -77,28 +76,36 @@ export async function authorizeRequestWithSpaceAcl<P extends string>(
 
     const linkset = await parseLinksetJsonBlob(linksetJsonRepresentation.blob)
 
-    const aclLinkTarget = iterateAclLinkTargets(linkset).next().value
-    if (aclLinkTarget) {
-      const parsedAclLinkTargetHref = parseSpaceLink(aclLinkTarget.href)
-      // we found a spaceAclResourceSelector!
-      // this was our goal since many lines above
-      spaceAclResourceSelector = parsedAclLinkTargetHref
+    const effectiveAclDetermination = await determineEffectiveAcl(
+      resources, linkset, new URL(request.url).pathname)
+    if (effectiveAclDetermination) {
+      effectiveAcl = effectiveAclDetermination.blob
     }
+
+    if (!effectiveAcl) {
+      // there is no effective acl, so we can't authorize
+      return false
+    }
+    if (effectiveAcl.type !== 'application/json') {
+      throw new Error(`Unexpected ACL type: expected 'application/json', but got '${effectiveAcl.type}'.`, {
+        cause: effectiveAcl.type,
+      })
+    }
+    const aclObject = JSON.parse(await effectiveAcl.text())
+    const acl = shapeOfSpaceAcl.parse(aclObject)
   }
 
   // if we could not determine an acl,
   // we cannot authorize the request
-  if (!spaceAclResourceSelector) return false
+  if (!effectiveAcl) return false
 
-  // now we have an acl resource selector.
-  // let's find a representation of it
+  // there is an effectiveAcl.
+  // try to parse it.
   let acl: ACL | undefined
   try {
-    acl = await queryAcl(resources, spaceAclResourceSelector)
+    acl = shapeOfSpaceAcl.parse(JSON.parse(await effectiveAcl.text()))
   } catch (error) {
-    if (error instanceof FailedToParseAcl) {
-      throw new HTTPException(401, error)
-    }
+    console.warn('error while parsing effective ACL.', error)
     throw error
   }
 
@@ -167,7 +174,7 @@ function checkIfRequestIsAuthorizedViaAcl(
   if (isPublicCanRead && matchRequestToPublicCanRead(acl, request)) {
     return true
   }
-  
+
   return false
 }
 
@@ -221,6 +228,7 @@ function parseSpaceLink(link: string) {
       name: match.groups?.name!,
     }
   }
+  throw new Error(`unable to parse space link`)
 }
 
 function* iterateAclLinkTargets(linkset: LinksetFromZod) {
@@ -228,5 +236,56 @@ function* iterateAclLinkTargets(linkset: LinksetFromZod) {
     for (const target of ctx.acl ?? []) {
       yield target
     }
+  }
+}
+
+async function determineEffectiveAcl(
+  resources: ResourceRepository,
+  linkset: LinksetFromZod,
+  resource: string,
+) {
+  // https://solidproject.org/TR/wac#effective-acl-resource
+  // Let resource be the resource.
+  // Let aclResource be the ACL resource of resource.
+  const aclResource = getAclResourceOfResource(linkset, resource)
+  // If resource has an associated aclResource with a representation, return aclResource.
+  const aclResourceRepresentation = aclResource
+    ? (await resources.iterateSpaceNamedRepresentations(aclResource).next()).value
+    : undefined
+  if (aclResourceRepresentation) {
+    return aclResourceRepresentation
+  }
+  // Otherwise, repeat the steps using the container resource of resource.
+  const containerResource = getContainerResource(resource)
+  if (!containerResource) return
+  return determineEffectiveAcl(resources, linkset, containerResource)
+}
+
+function getContainerResource(resource: string) {
+  if (resource === '/') return
+  const match = resource.match(/(?<container>.+?)(?<item>[^/]+\/?$)/)
+  if (!match) throw new Error('failed to parse resource')
+  const container = match?.groups?.container
+  if (!container) throw new Error(`unable to determine container`)
+  return container
+}
+
+function getAclResourceOfResource(
+  linkset: LinksetFromZod,
+  resource: string,
+) {
+  for (const link of linkset.linkset) {
+    if (link.anchor !== resource) continue
+    const acls = link.acl
+    if (!acls) continue
+    if (acls.length === 0) continue
+    if (acls.length > 1) throw new Error(`anchor must not have more than one acl link target`)
+    const aclLink = acls[0]
+    const aclLinkHref = aclLink.href
+    const parsed = parseSpaceLink(aclLink.href)
+    if (!parsed) throw new Error(`failed to parse space link`, {
+      cause: { link: aclLink }
+    })
+    return parsed
   }
 }
