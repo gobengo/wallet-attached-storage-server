@@ -46,31 +46,11 @@ await describe('wallet-attached-storage-server with acl type PublicCanRead', asy
 
     await t.test('PUT homepage with http sig from space controller', async t => {
       const homepage = new Blob(['<!doctype html><h1>Home Page</h1><p>hello world<p>'], { type: 'text/html' })
-      const requestUrl = new URL(`/space/${spaceUuid}/`, 'http://example.example')
-      const requestMethod = 'PUT'
-      const responseToPutHomepage = await server.fetch(new Request(requestUrl, {
-        method: requestMethod,
-        body: homepage,
-        headers: {
-          authorization: await createHttpSignatureAuthorization({
-            signer: keyForAlice,
-            url: requestUrl,
-            method: requestMethod,
-            headers: {},
-            includeHeaders: [
-              '(created)',
-              '(expires)',
-              '(key-id)',
-              '(request-target)',
-            ],
-            created: new Date,
-            expires: new Date(Date.now() + 30 * 1000),
-          })
-        }
-      }))
-      assert.ok(
-        responseToPutHomepage.ok,
-        'response to PUT /space/:uuid/ MUST be ok')
+      const href = `/space/${spaceUuid}/`
+      const body = homepage
+      const signer = keyForAlice
+      const response = await serverPut({ server, href, body, signer })
+      assert.ok(response.ok, `response to PUT ${href} MUST be ok`)
     })
 
     await t.test('PUT /space/:space/links/ with acl link', async t => {
@@ -88,31 +68,11 @@ await describe('wallet-attached-storage-server with acl type PublicCanRead', asy
         [JSON.stringify(linkset)],
         { type: 'application/linkset+json' }
       )
-      const requestUrl = new URL(`/space/${spaceUuid}/links/`, 'http://example.example')
-      const requestMethod = 'PUT'
-      const responseToPutHomepage = await server.fetch(new Request(requestUrl, {
-        method: requestMethod,
-        body: blobForLinkset,
-        headers: {
-          authorization: await createHttpSignatureAuthorization({
-            signer: keyForAlice,
-            url: requestUrl,
-            method: requestMethod,
-            headers: {},
-            includeHeaders: [
-              '(created)',
-              '(expires)',
-              '(key-id)',
-              '(request-target)',
-            ],
-            created: new Date,
-            expires: new Date(Date.now() + 30 * 1000),
-          })
-        }
-      }))
-      assert.ok(
-        responseToPutHomepage.ok,
-        `response to PUT ${requestUrl.pathname} MUST be ok`)
+      const href = `/space/${spaceUuid}/links/`
+      const body = blobForLinkset
+      const signer = keyForAlice
+      const response = await serverPut({ server, href, body, signer })
+      assert.ok(response.ok, `response to PUT ${href} MUST be ok`)
     })
 
     await t.test(`PUT PublicCanRead /space/:space/acl`, async t => {
@@ -120,31 +80,11 @@ await describe('wallet-attached-storage-server with acl type PublicCanRead', asy
       {
         const acl = { type: 'PublicCanRead' }
         const blobForAcl = new Blob([JSON.stringify(acl)], { type: 'application/json' })
-        const requestUrl = new URL(`/space/${spaceUuid}/acl`, 'http://example.example')
-        const requestMethod = 'PUT'
-        const responseToPutHomepage = await server.fetch(new Request(requestUrl, {
-          method: requestMethod,
-          body: blobForAcl,
-          headers: {
-            authorization: await createHttpSignatureAuthorization({
-              signer: keyForAlice,
-              url: requestUrl,
-              method: requestMethod,
-              headers: {},
-              includeHeaders: [
-                '(created)',
-                '(expires)',
-                '(key-id)',
-                '(request-target)',
-              ],
-              created: new Date,
-              expires: new Date(Date.now() + 30 * 1000),
-            })
-          }
-        }))
-        assert.ok(
-          responseToPutHomepage.ok,
-          `response to PUT ${requestUrl.pathname} MUST be ok`)
+        const href = `/space/${spaceUuid}/acl`
+        const body = blobForAcl
+        const signer = keyForAlice
+        const response = await serverPut({ server, href, body, signer })
+        assert.ok(response.ok, `response to PUT ${href} MUST be ok`)
       }
     })
 
