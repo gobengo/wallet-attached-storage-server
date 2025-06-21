@@ -228,6 +228,7 @@ function parseSpaceLink(link: string) {
       name: match.groups?.name!,
     }
   }
+  throw new Error(`unable to parse space link`)
 }
 
 function* iterateAclLinkTargets(linkset: LinksetFromZod) {

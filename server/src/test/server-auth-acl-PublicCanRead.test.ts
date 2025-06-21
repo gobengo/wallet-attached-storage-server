@@ -170,31 +170,11 @@ await describe('wallet-attached-storage-server with acl type PublicCanRead', asy
       // put item in space container
       {
         const item0Representation = new Blob(['<!doctype html><h1>Item 0</h1>'], { type: 'text/html' })
-        const requestUrl = item0Url
-        const requestMethod = 'PUT'
-        const responseToPutHomepage = await server.fetch(new Request(item0Url, {
-          method: requestMethod,
-          body: item0Representation,
-          headers: {
-            authorization: await createHttpSignatureAuthorization({
-              signer: keyForAlice,
-              url: requestUrl,
-              method: requestMethod,
-              headers: {},
-              includeHeaders: [
-                '(created)',
-                '(expires)',
-                '(key-id)',
-                '(request-target)',
-              ],
-              created: new Date,
-              expires: new Date(Date.now() + 30 * 1000),
-            })
-          }
-        }))
-        assert.ok(
-          responseToPutHomepage.ok,
-          `response to ${requestMethod} ${item0Url.pathname} MUST be ok`)
+        const href = item0Url.pathname
+        const body = item0Representation
+        const signer = keyForAlice
+        const response = await serverPut({ server, href, body, signer })
+        assert.ok(response.ok, `response to PUT ${href} MUST be ok`)
       }
 
       // get the item without auth, expecting it to be ok
